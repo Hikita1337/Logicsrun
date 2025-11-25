@@ -1,40 +1,63 @@
 import os
-import subprocess
+import json
+import base64
 from mitmproxy import http
+from datetime import datetime
 
-LOG_PATH = "logs/mitm.log"
+LOG_DIR = "Logs"
 FILES_DIR = "captured_files"
 
+os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(FILES_DIR, exist_ok=True)
 
-def save_and_commit(path):
-    subprocess.run(["git", "add", path])
-    subprocess.run(["git", "commit", "-m", f"update: {path}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    subprocess.run(["git", "push"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def save_log(entry):
+    """Сохраняет строку лога в дневной файл"""
+    log_file = os.path.join(LOG_DIR, f"log_{datetime.now().date()}.txt")
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(entry + "\n")
 
+def save_response_content(flow: http.HTTPFlow, content: bytes):
+    """Сохраняет любые файлы, которые возвращает сервер"""
+    if not content:
+        return
 
-def request(flow: http.HTTPFlow):
-    with open(LOG_PATH, "a") as f:
-        f.write(f"[REQUEST] {flow.request.method} {flow.request.pretty_url}\n")
+    # Имя файла = timestamp + путь
+    safe_path = flow.request.path.replace("/", "_").replace("?", "_")
+    filename = f"{datetime.now().timestamp()}_{safe_path}"
 
-    save_and_commit(LOG_PATH)
+    full_path = os.path.join(FILES_DIR, filename)
 
+    with open(full_path, "wb") as f:
+        f.write(content)
+
+    save_log(f"[FILE SAVED] {filename} ({len(content)} bytes)")
 
 def response(flow: http.HTTPFlow):
-    with open(LOG_PATH, "a") as f:
-        f.write(f"[RESPONSE] {flow.request.pretty_url} → {flow.response.status_code}\n")
+    """Логирование ответов сервера и сохранение файлов"""
+    try:
+        req = flow.request
+        res = flow.response
 
-    save_and_commit(LOG_PATH)
+        entry = {
+            "time": str(datetime.now()),
+            "url": req.pretty_url,
+            "method": req.method,
+            "status": res.status_code,
+            "request_headers": dict(req.headers),
+            "response_headers": dict(res.headers),
+            "request_body": req.get_text(strict=False) if req.raw_content else "",
+            "response_body": res.get_text(strict=False) if res.raw_content else "",
+        }
 
-    content_type = flow.response.headers.get("Content-Type", "")
+        save_log(json.dumps(entry, ensure_ascii=False))
 
-    if "application" in content_type or "image" in content_type or "octet-stream" in content_type:
-        filename = flow.request.path.replace("/", "_")
-        if len(filename) > 120:
-            filename = filename[-120:]
+        # Сохранение бинарных данных (картинки, zip, видео, и т.п.)
+        content_type = res.headers.get("content-type", "")
+        if "application" in content_type or \
+           "image" in content_type or \
+           "video" in content_type or \
+           "octet-stream" in content_type:
+            save_response_content(flow, res.raw_content)
 
-        file_path = os.path.join(FILES_DIR, filename)
-
-        with open(file_path, "wb") as f:
-            f.write(flow.response.raw_content)
-
-        save_and_commit(file_path)
+    except Exception as e:
+        save_log(f"[ERROR] {str(e)}")
