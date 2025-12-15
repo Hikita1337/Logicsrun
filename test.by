@@ -1,0 +1,85 @@
+import requests
+import time
+import json
+import subprocess
+
+URL = "https://cs2run.app/discount"
+
+ACCOUNTS = [
+    {
+        "name": "ACC_LIMIT",
+        "expected": "LIMIT",
+        "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTg2ODYxLCJpYXQiOjE3NjU4MDU4NjYsImV4cCI6MTc2NjY2OTg2Nn0.2PreuTtHFb972EyzQPuQDFsTCkqefox_FtZzbFqkdUw"
+    },
+    {
+        "name": "ACC_NO_DEPOSIT",
+        "expected": "DEPOSIT_CONDITION_ERROR",
+        "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mjk2NzU1NywiaWF0IjoxNzY1ODA5OTU1LCJleHAiOjE3NjY2NzM5NTV9.duqknx61yOwySx1uVrGCR5Zpk3SX-xTHqnuBxevTIYM"
+    },
+    {
+        "name": "ACC_BAD_TOKEN",
+        "expected": "AUTH_ERROR",
+        "jwt": "JWT_TOKEN_3"
+    }
+]
+
+PROMO_CODE = "MJLDS31"
+DELAY_BETWEEN_REQUESTS = 0.05  # 50 ms
+CYCLES = 50
+LOG_FILE = "api_log.jsonl"
+
+
+def send_request(account, cycle, index):
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json",
+        "Accept-Language": "ru",
+        "Authorization": f"JWT {account['jwt']}"
+    }
+
+    payload = {
+        "code": PROMO_CODE,
+        "token": "1a"
+    }
+
+    log_entry = {
+        "cycle": cycle,
+        "index": index,
+        "account": account["name"],
+        "expected": account["expected"]
+    }
+
+    try:
+        response = requests.post(URL, headers=headers, json=payload, timeout=10)
+        data = response.json()
+        log_entry["response"] = data
+        log_entry["error"] = data.get("error")
+        print(f"[cycle {cycle:02d}] [#{index}] {account['name']} | EXPECTED={account['expected']} | GOT={log_entry['error']}")
+
+    except Exception as e:
+        log_entry["response"] = None
+        log_entry["error"] = str(e)
+        print(f"[cycle {cycle:02d}] [#{index}] {account['name']} | EXCEPTION={e}")
+
+    # записываем в файл (каждая строка — отдельный JSON)
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+
+
+print("=== START API ORDER TEST ===")
+
+for cycle in range(1, CYCLES + 1):
+    for index, account in enumerate(ACCOUNTS, start=1):
+        send_request(account, cycle, index)
+        time.sleep(DELAY_BETWEEN_REQUESTS)
+
+print("=== TEST FINISHED ===")
+
+# Автоматический git commit + push
+try:
+    subprocess.run(["git", "add", LOG_FILE], check=True)
+    subprocess.run(["git", "commit", "-m", f"Update API log after {CYCLES} cycles"], check=True)
+    subprocess.run(["git", "push"], check=True)
+    print("✅ Log pushed to repository")
+except subprocess.CalledProcessError as e:
+    print(f"⚠️ Git push failed: {e}")
