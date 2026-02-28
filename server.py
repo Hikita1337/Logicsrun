@@ -345,14 +345,14 @@ async def github_backup_loop():
 async def keep_alive():
     import aiohttp
     while True:
-        await asyncio.sleep(240 + random.random() * 120)
+        await asyncio.sleep(60)  # маленький интервал для теста
         try:
+            print("Pinging self...")
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{SELF_URL}/") as resp:
+                async with session.get(f"{SELF_URL}/api/stats") as resp:
                     print(f"Keep-alive ping: {resp.status}")
         except Exception as e:
             print(f"Keep-alive error: {e}")
-
 
 @app.on_event("startup")
 async def startup_event():
