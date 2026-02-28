@@ -34,6 +34,7 @@ LOTTERY_ID = 169
 API_URL = "https://cs2run.app/lottery/state?mode=1"
 # Use DB_PATH env var if provided (for Render Persistent Disk), otherwise default to local file
 DB_FILE = os.getenv("DB_PATH", "lottery_stats.db")
+SELF_URL = os.environ.get("SELF_URL", "https://logicsrun.onrender.com")
 
 # Ensure directory exists if DB_PATH is absolute/custom
 db_dir = os.path.dirname(DB_FILE)
@@ -175,9 +176,6 @@ async def poll_loop():
             logger.error(f"Error in poll loop: {e}")
             await asyncio.sleep(5)
 
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(poll_loop())
 
 @app.get("/api/stats")
 async def get_stats():
@@ -290,36 +288,75 @@ async def download_source():
 if os.path.exists("dist"):
     app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-    "Mozilla/5.0 (Linux; Android 10; SM-G973F)",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"
-]
+@app.get("/healthz", response_class=HTMLResponse)
+async def healthcheck():
+    return HTMLResponse("OK")
+    
+import base64
 
-async def self_ping():
+async def github_backup_loop():
+    # репозиторий
+    user = os.getenv("GITHUB_USERNAME")
+    repo = os.getenv("GITHUB_REPO")
+    token = os.getenv("GITHUB_TOKEN")
+
+    if not user or not repo or not token:
+        logger.warning("GitHub backup not configured!")
+        return
+
     while True:
-        ua = random.choice(USER_AGENTS)  # Выбираем случайный User-Agent
         try:
-            # Пинг сам сервер (или можно использовать внешний URL, если хочешь стабильно держать сервер активным)
+            # читаем файл
+            with open(DB_FILE, "rb") as f:
+                content = f.read()
+
+            # подготавливаем base64
+            b64 = base64.b64encode(content).decode()
+
+            import httpx
             async with httpx.AsyncClient() as client:
-                response = await client.get("http://localhost:3000", headers={"User-Agent": ua})
-                if response.status_code == 200:
-                    logger.info(f"Self ping successful with User-Agent: {ua}")
-                else:
-                    logger.warning(f"Self ping failed with status code: {response.status_code}")
+                # получаем sha последнего коммита
+                url = f"https://api.github.com/repos/{user}/{repo}/contents/lottery_stats.db"
+                headers = {"Authorization": f"token {token}"}
+                r = await client.get(url, headers=headers)
+                
+                sha = None
+                if r.status_code == 200:
+                    sha = r.json()["sha"]
+
+                body = {
+                    "message": "Auto backup lottery_stats.db",
+                    "content": b64,
+                }
+                if sha:
+                    body["sha"] = sha
+
+                # пушим
+                res = await client.put(url, json=body, headers=headers)
+                logger.info(f"Backup to GitHub status: {res.status_code}")
         except Exception as e:
-            logger.error(f"Error during self ping: {e}")
-        
-        # Ждем от 3 до 5 минут
-        await asyncio.sleep(random.randint(180, 300))  # Пауза между запросами (3–5 минут)
+            logger.error(f"GitHub backup error: {e}")
+
+        await asyncio.sleep(300)  # 5 минут
+
+async def keep_alive():
+    import aiohttp
+    while True:
+        await asyncio.sleep(240 + random.random() * 120)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{SELF_URL}/healthz") as resp:
+                    print(f"Keep-alive ping: {resp.status}")
+        except Exception as e:
+            print(f"Keep-alive error: {e}")
+
 
 @app.on_event("startup")
 async def startup_event():
     # Запускаем самопинг в фоне
-    asyncio.create_task(self_ping())
-    asyncio.create_task(poll_loop())  # Твоя текущая задача polling
-
+    asyncio.create_task(keep_alive())
+    asyncio.create_task(poll_loop())
+    asyncio.create_task(github_backup_loop())
 
 if __name__ == "__main__":
     import uvicorn
