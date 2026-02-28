@@ -348,7 +348,7 @@ async def keep_alive():
         await asyncio.sleep(240 + random.random() * 120)
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{SELF_URL}/api/stats") as resp:
+                async with session.get(f"{SELF_URL}/") as resp:
                     print(f"Keep-alive ping: {resp.status}")
         except Exception as e:
             print(f"Keep-alive error: {e}")
