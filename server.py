@@ -35,7 +35,7 @@ LOTTERY_ID = 169
 API_URL = "https://cs2run.app/lottery/state?mode=1"
 # Use DB_PATH env var if provided (for Render Persistent Disk), otherwise default to local file
 DB_FILE = os.getenv("DB_PATH", "lottery_stats.db")
-SELF_URL = os.environ.get("SELF_URL", "https://logicsrun.onrender.com")
+SELF_URL = os.environ.get("SELF_URL", "http://localhost:3000")
 
 # Ensure directory exists if DB_PATH is absolute/custom
 db_dir = os.path.dirname(DB_FILE)
