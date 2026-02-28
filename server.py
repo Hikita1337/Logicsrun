@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi.responses import HTMLResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -284,13 +285,15 @@ async def download_source():
         logger.error(f"Download error: {e}")
         raise HTTPException(status_code=500, detail="Failed to create zip")
 
-# Serve static files
-if os.path.exists("dist"):
-    app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 
 @app.get("/healthz", response_class=HTMLResponse)
 async def healthcheck():
     return HTMLResponse("OK")
+    
+# Serve static files
+if os.path.exists("dist"):
+    app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+
     
 import base64
 
