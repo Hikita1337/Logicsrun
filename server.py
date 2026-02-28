@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.responses import HTMLResponse
+import aiohttp
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -342,17 +343,22 @@ async def github_backup_loop():
 
         await asyncio.sleep(300)  # 5 минут
 
+
+
+logger = logging.getLogger("keep_alive")
+
 async def keep_alive():
-    import aiohttp
     while True:
-        await asyncio.sleep(60)  # маленький интервал для теста
+        await asyncio.sleep(240 + random.random() * 120)  # твой интервал
         try:
-            print("Pinging self...")
+            logger.info(f"Keep-alive ping attempt to {SELF_URL}/api/stats at {datetime.utcnow().isoformat()}")
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{SELF_URL}/api/stats") as resp:
-                    print(f"Keep-alive ping: {resp.status}")
+                    text_snippet = (await resp.text())[:100]  # первые 100 символов ответа для проверки
+                    logger.info(f"Keep-alive ping response: {resp.status}, snippet: {text_snippet}")
         except Exception as e:
-            print(f"Keep-alive error: {e}")
+            logger.error(f"Keep-alive error: {e}")
+
 
 @app.on_event("startup")
 async def startup_event():
