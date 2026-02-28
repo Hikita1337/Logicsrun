@@ -6,7 +6,7 @@ import zipfile
 import io
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-
+import random
 import httpx
 import aiosqlite
 from fastapi import FastAPI, HTTPException, Response
@@ -289,6 +289,37 @@ async def download_source():
 # Serve static files
 if os.path.exists("dist"):
     app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    "Mozilla/5.0 (Linux; Android 10; SM-G973F)",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"
+]
+
+async def self_ping():
+    while True:
+        ua = random.choice(USER_AGENTS)  # Выбираем случайный User-Agent
+        try:
+            # Пинг сам сервер (или можно использовать внешний URL, если хочешь стабильно держать сервер активным)
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://localhost:3000", headers={"User-Agent": ua})
+                if response.status_code == 200:
+                    logger.info(f"Self ping successful with User-Agent: {ua}")
+                else:
+                    logger.warning(f"Self ping failed with status code: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error during self ping: {e}")
+        
+        # Ждем от 3 до 5 минут
+        await asyncio.sleep(random.randint(180, 300))  # Пауза между запросами (3–5 минут)
+
+@app.on_event("startup")
+async def startup_event():
+    # Запускаем самопинг в фоне
+    asyncio.create_task(self_ping())
+    asyncio.create_task(poll_loop())  # Твоя текущая задача polling
+
 
 if __name__ == "__main__":
     import uvicorn
