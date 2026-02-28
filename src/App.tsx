@@ -7,7 +7,6 @@ import {
   Timer,
   Loader2,
   Hash,
-  Download,
   Sun,
   Moon
 } from 'lucide-react';
@@ -159,10 +158,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleDownload = () => {
-    window.location.href = '/api/download';
-  };
-
   const chartData = React.useMemo(() => {
     if (!stats?.intervalStats) return [];
 
@@ -262,14 +257,6 @@ export default function App() {
               title={darkMode ? "Включить светлую тему" : "Включить темную тему"}
             >
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-
-            <button 
-              onClick={handleDownload}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-zinc-700 dark:text-zinc-300 text-sm font-medium shadow-sm dark:shadow-none"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Скачать код</span>
             </button>
             
             <Countdown finishAt={stats.currentRoundFinishAt} />
